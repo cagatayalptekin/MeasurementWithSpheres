@@ -71,9 +71,14 @@ class MeasurementWithSpheresParameterNode:
     thresholdedVolume - The output volume that will contain the thresholded volume.
     invertedVolume - The output volume that will contain the inverted thresholded volume.
     """
-    lineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length1')
-    lineNode2 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length2')
-    lineNode3 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length between points')
+    lineNode = vtk.vtkLineSource()
+    tube = vtk.vtkTubeFilter()
+    tube2 = vtk.vtkTubeFilter()
+    tube3 = vtk.vtkTubeFilter()
+    modelsLogic = slicer.modules.models.logic()
+
+    lineNode2 =  vtk.vtkLineSource()
+    lineNode3 =  vtk.vtkLineSource()
     angleNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsAngleNode','Angle')
 # Get markup node from scene
     markups = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLMarkupsFiducialNode')
@@ -241,20 +246,28 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
          
         
         
-        self.logic.UpdateModels(self._parameterNode.lineNode,self._parameterNode.lineNode2,self._parameterNode.lineNode3,self._parameterNode.angleNode,self._parameterNode.i,self._parameterNode.count,self._parameterNode.markups,self._parameterNode.spheres)
+        self.logic.UpdateModels(self._parameterNode.lineNode,self._parameterNode.lineNode2,self._parameterNode.lineNode3,self._parameterNode.angleNode,self._parameterNode.i,self._parameterNode.count,self._parameterNode.markups,self._parameterNode.spheres,self._parameterNode.tube,self._parameterNode.tube2,self._parameterNode.tube3)
 
     def createAngle(self, caller=None, event=None)->None:
-        if self._parameterNode.lineNode is None:
+        for itemIndex, sphere in enumerate(self._parameterNode.spheres):
+            sphere.SetPhiResolution(30)
+            sphere.SetThetaResolution(30)
+            model =self._parameterNode.modelsLogic.AddModel(sphere.GetOutputPort())
+            model.GetDisplayNode().SetVisibility2D(True)
+            model.GetDisplayNode().SetSliceIntersectionThickness(3)
+            model.GetDisplayNode().SetColor(1,1-itemIndex*0.3,itemIndex*0.3)
+    
+        if self._parameterNode.angleNode is None:
             
-            self._parameterNode.lineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length1')
-            self._parameterNode.lineNode2 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length2')
-            self._parameterNode.lineNode3 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length between points')
+            self._parameterNode.lineNode =  vtk.vtkLineSource()
+            self._parameterNode.lineNode2 =  vtk.vtkLineSource()
+            self._parameterNode.lineNode3 = vtk.vtkLineSource()
             self._parameterNode.angleNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsAngleNode','Angle')
                 # Get markup node from scene
             self._parameterNode.markups = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLMarkupsFiducialNode')
             self._parameterNode.i=0
             self._parameterNode.count=1
-        self.logic.UpdateModels(self._parameterNode.lineNode,self._parameterNode.lineNode2,self._parameterNode.lineNode3,self._parameterNode.angleNode,self._parameterNode.i,self._parameterNode.count,self._parameterNode.markups,self._parameterNode.spheres)
+        self.logic.UpdateModels(self._parameterNode.lineNode,self._parameterNode.lineNode2,self._parameterNode.lineNode3,self._parameterNode.angleNode,self._parameterNode.i,self._parameterNode.count,self._parameterNode.markups,self._parameterNode.spheres,self._parameterNode.tube,self._parameterNode.tube2,self._parameterNode.tube3,self._parameterNode.modelsLogic)
         self._parameterNode.markups.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.changePoints, 2)
 
     def changeAnglePosition(self)->None:
@@ -347,7 +360,7 @@ class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
         P /= b1 + b2 + b3
         return P, R
 
-    def UpdateModels(self,lineNode,lineNode2,lineNode3,angleNode,i,count,markups,spheres):
+    def UpdateModels(self,lineNode,lineNode2,lineNode3,angleNode,i,count,markups,spheres,tube,tube2,tube3,modelsLogic):
         """Update the sphere and line models from the fiducial points"""
         
         center0, radius0 = self.sphereFrom3Points(markups,0)
@@ -370,43 +383,33 @@ class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
         
         
         
-        markupsNode = slicer.util.getNode('Length1')
-        markupsNode2 = slicer.util.getNode('Length2')        
-
-        markupsNode.RemoveAllControlPoints()
-        markupsNode2.RemoveAllControlPoints()
+      
         
 
-        lineNode.RemoveAllControlPoints()
-        lineNode2.RemoveAllControlPoints()
+        lineNode.SetPoint1(center0)
+        lineNode.SetPoint2(center1)
 
-        slicer.app.processEvents()
-        lineNode.AddControlPointWorld(center0)
-        lineNode.AddControlPointWorld(center1)
-    
-    
-        lineNode2.AddControlPointWorld(center2)
-        lineNode2.AddControlPointWorld(center3)
+        lineNode2.SetPoint1(center2)
+        lineNode2.SetPoint2(center3)
+
+        tube.SetInputConnection(lineNode.GetOutputPort())
+        model = modelsLogic.AddModel(tube.GetOutputPort())
+        model.GetDisplayNode().SetVisibility2D(True)
+        model.GetDisplayNode().SetSliceIntersectionThickness(2)
+        model.GetDisplayNode().SetColor(1, 0.4, 0.6)
+
+        tube2.SetInputConnection(lineNode2.GetOutputPort())
+        model2 = modelsLogic.AddModel(tube2.GetOutputPort())
+        model2.GetDisplayNode().SetVisibility2D(True)
+        model2.GetDisplayNode().SetSliceIntersectionThickness(2)
+        model2.GetDisplayNode().SetColor(1, 0.4, 0.6)
+
 
         
     
     # Update line endpoints
     
-        lineDisplayNode = slicer.util.getNode(lineNode.GetDisplayNodeID())
-
-        # Set line color (red in this example)
-        lineDisplayNode.SetColor([1, 0, 0])
-
-        # Set line thickness
-        lineDisplayNode.SetLineWidth(2)
-        
-        lineDisplayNode2 = slicer.util.getNode(lineNode2.GetDisplayNodeID())
-
-        # Set line color (red in this example)
-        lineDisplayNode2.SetColor([1, 0, 0])
-
-        # Set line thickness
-        lineDisplayNode2.SetLineWidth(2)
+    
         
         
         
@@ -421,18 +424,12 @@ class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
 
         # Calculate the midpoint between the centers of Sphere 3 and Sphere 4
         midpoint_3_4 = (center2 + center3) / 2
-        lineNode3.RemoveAllControlPoints()
-        slicer.app.processEvents()
-        lineNode3.AddControlPointWorld(midpoint_1_2)
-        lineNode3.AddControlPointWorld(midpoint_3_4)
-        lineDisplayNode3 = slicer.util.getNode(lineNode3.GetDisplayNodeID())
-
-        # Set line color (red in this example)
-        lineDisplayNode3.SetColor([1, 0, 0])
-
-        # Set line thickness
-        lineDisplayNode3.SetLineWidth(2)
         
+        tube3.SetInputConnection(lineNode3.GetOutputPort())
+        model3 = modelsLogic.AddModel(tube3.GetOutputPort())
+        model3.GetDisplayNode().SetVisibility2D(True)
+        model3.GetDisplayNode().SetSliceIntersectionThickness(2)
+        model3.GetDisplayNode().SetColor(1, 0.4, 0.6)
         angleNode.RemoveAllControlPoints()
         angleNode.AddControlPointWorld(midpoint_1_2)     
         angleNode.AddControlPointWorld(midpoint_3_4)
@@ -450,24 +447,12 @@ class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
     
         # Set line thickness
         angleDisplayNode.SetLineWidth(2)
-        modelsLogic = slicer.modules.models.logic()
 
-        for itemIndex, sphere in enumerate(spheres):
-            sphere.SetPhiResolution(30)
-            sphere.SetThetaResolution(30)
-            model = modelsLogic.AddModel(sphere.GetOutputPort())
-            model.GetDisplayNode().SetVisibility2D(True)
-            model.GetDisplayNode().SetSliceIntersectionThickness(3)
-            model.GetDisplayNode().SetColor(1,1-itemIndex*0.3,itemIndex*0.3)
-    
-        for itemIndex, sphere in enumerate(spheres):
-            sphere.SetPhiResolution(30)
-            sphere.SetThetaResolution(30)
-            model = modelsLogic.AddModel(sphere.GetOutputPort())
-            model.GetDisplayNode().SetVisibility2D(True)
-            model.GetDisplayNode().SetSliceIntersectionThickness(3)
-            model.GetDisplayNode().SetColor(1,1-itemIndex*0.3,itemIndex*0.3)
-    
+        
+        tube.Modified()
+        tube2.Modified()
+        tube3.Modified()
+
         slicer.util.forceRenderAllViews()
 
 
