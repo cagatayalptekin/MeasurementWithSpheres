@@ -23,7 +23,7 @@
    <item>
     <widget class="QPushButton" name="createangle">
      <property name="text">
-      <string>Create Angle</string>
+      <string>Create Spheres</string>
      </property>
     </widget>
    </item>
