@@ -222,7 +222,7 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self.ui.resetview.enabled = True
             self.ui.changeangleposition.toolTip = _("Change Angle")
             self.ui.changeangleposition.enabled = True
-            self.ui.createangle.toolTip = _("Create Angle")
+            self.ui.createangle.toolTip = _("Create Spheres")
             self.ui.createangle.enabled = False
             self.ui.deleteline.toolTip = _("Delete Line")
             self.ui.deleteline.enabled = True
@@ -233,14 +233,14 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
         else:
             self.ui.changeangleposition.toolTip = _("Change Angle")
             self.ui.changeangleposition.enabled = False
-            self.ui.createangle.toolTip = _("Create Angle")
+            self.ui.createangle.toolTip = _("Create Spheres")
             self.ui.createangle.enabled = True
             self.ui.deleteline.toolTip = _("Delete Line")
             self.ui.deleteline.enabled = True
             self.ui.generateline.toolTip = _("Generate Line")
             self.ui.generateline.enabled = True
             self.ui.resetview.toolTip=("Reset View")
-            self.ui.resetview.enabled = True
+            self.ui.resetview.enabled = False
       
 
 
