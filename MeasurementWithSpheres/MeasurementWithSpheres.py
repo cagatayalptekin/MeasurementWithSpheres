@@ -3,7 +3,11 @@ import os
 from typing import Annotated, Optional
 
 import vtk
+from typing import List
 
+import numpy as np
+from __main__ import qt, slicer
+import math
 import slicer
 from slicer.i18n import tr as _
 from slicer.i18n import translate
@@ -33,73 +37,24 @@ class MeasurementWithSpheres(ScriptedLoadableModule):
         # TODO: set categories (folders where the module shows up in the module selector)
         self.parent.categories = [translate("qSlicerAbstractCoreModule", "Examples")]
         self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-        self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+        self.parent.contributors = ["Cagatay Alptekin (Non-Nocere)"]  # TODO: replace with "Firstname Lastname (Organization)"
         # TODO: update with short description of the module and a link to online module documentation
         # _() function marks text as translatable to other languages
         self.parent.helpText = _("""
 This is an example of scripted loadable module bundled in an extension.
-See more information in <a href="https://github.com/organization/projectname#MeasurementWithSpheres">module documentation</a>.
+See more information in <a href="https://github.com/cagatayalptekin/MeasurementWithSpheres">module documentation</a>.
 """)
         # TODO: replace with organization, grant and thanks
         self.parent.acknowledgementText = _("""
-This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
-and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+This file was originally developed by Cagatay Alptekin.
 """)
 
+        
+       
         # Additional initialization step after application startup is complete
-        slicer.app.connect("startupCompleted()", registerSampleData)
+ 
 
-
-#
-# Register sample data sets in Sample Data module
-#
-
-
-def registerSampleData():
-    """Add data sets to Sample Data module."""
-    # It is always recommended to provide sample data for users to make it easy to try the module,
-    # but if no sample data is available then this method (and associated startupCompeted signal connection) can be removed.
-
-    import SampleData
-
-    iconsPath = os.path.join(os.path.dirname(__file__), "Resources/Icons")
-
-    # To ensure that the source code repository remains small (can be downloaded and installed quickly)
-    # it is recommended to store data sets that are larger than a few MB in a Github release.
-
-    # MeasurementWithSpheres1
-    SampleData.SampleDataLogic.registerCustomSampleDataSource(
-        # Category and sample name displayed in Sample Data module
-        category="MeasurementWithSpheres",
-        sampleName="MeasurementWithSpheres1",
-        # Thumbnail should have size of approximately 260x280 pixels and stored in Resources/Icons folder.
-        # It can be created by Screen Capture module, "Capture all views" option enabled, "Number of images" set to "Single".
-        thumbnailFileName=os.path.join(iconsPath, "MeasurementWithSpheres1.png"),
-        # Download URL and target file name
-        uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-        fileNames="MeasurementWithSpheres1.nrrd",
-        # Checksum to ensure file integrity. Can be computed by this command:
-        #  import hashlib; print(hashlib.sha256(open(filename, "rb").read()).hexdigest())
-        checksums="SHA256:998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-        # This node name will be used when the data set is loaded
-        nodeNames="MeasurementWithSpheres1",
-    )
-
-    # MeasurementWithSpheres2
-    SampleData.SampleDataLogic.registerCustomSampleDataSource(
-        # Category and sample name displayed in Sample Data module
-        category="MeasurementWithSpheres",
-        sampleName="MeasurementWithSpheres2",
-        thumbnailFileName=os.path.join(iconsPath, "MeasurementWithSpheres2.png"),
-        # Download URL and target file name
-        uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-        fileNames="MeasurementWithSpheres2.nrrd",
-        checksums="SHA256:1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-        # This node name will be used when the data set is loaded
-        nodeNames="MeasurementWithSpheres2",
-    )
-
-
+ 
 #
 # MeasurementWithSpheresParameterNode
 #
@@ -116,12 +71,32 @@ class MeasurementWithSpheresParameterNode:
     thresholdedVolume - The output volume that will contain the thresholded volume.
     invertedVolume - The output volume that will contain the inverted thresholded volume.
     """
+    lineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length1')
+  
+    observerId:int
+    lineNode2 =  slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length2')
+    lineNode3 =  slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', 'Length3')
+    angleNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsAngleNode','Angle')
+# Get markup node from scene
+    markups = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLMarkupsFiducialNode')
+    i=0
+    count=1
+    spheres = [vtk.vtkSphereSource() for _ in range(4)]
+  
+    models: List[slicer.vtkMRMLModelNode] = []
+    lineLength: Annotated[float, WithinRange(0, 300)] = 50
+    center0:float
+    radius0:float
+    center1:float
+    radius1:float
+    center2:float
+    radius2:float
+    center3:float
+    radius3:float
+    isAngleCreated:bool=False
+    
 
-    inputVolume: vtkMRMLScalarVolumeNode
-    imageThreshold: Annotated[float, WithinRange(-100, 500)] = 100
-    invertThreshold: bool = False
-    thresholdedVolume: vtkMRMLScalarVolumeNode
-    invertedVolume: vtkMRMLScalarVolumeNode
+
 
 
 #
@@ -151,12 +126,15 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
         uiWidget = slicer.util.loadUI(self.resourcePath("UI/MeasurementWithSpheres.ui"))
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
-
+        
+        
+        
+       
         # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
         # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
         # "setMRMLScene(vtkMRMLScene*)" slot.
         uiWidget.setMRMLScene(slicer.mrmlScene)
-
+        
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = MeasurementWithSpheresLogic()
@@ -165,13 +143,22 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
+
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
         # Buttons
-        self.ui.applyButton.connect("clicked(bool)", self.onApplyButton)
+        self.ui.createangle.connect("clicked(bool)", self.createAngle)
+        self.ui.changeangleposition.connect("clicked(bool)", self.changeAnglePosition)
+        self.ui.generateline.connect("clicked(bool)", self.generateLine)
+        self.ui.deleteline.connect("clicked(bool)", self.deleteLine)
+        self.ui.resetview.connect("clicked(bool)", self.resetView)
+        
+
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
+
+
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -208,11 +195,7 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
 
         self.setParameterNode(self.logic.getParameterNode())
 
-        # Select default input nodes if nothing is selected yet to save a few clicks for the user
-        if not self._parameterNode.inputVolume:
-            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-            if firstVolumeNode:
-                self._parameterNode.inputVolume = firstVolumeNode
+       
 
     def setParameterNode(self, inputParameterNode: Optional[MeasurementWithSpheresParameterNode]) -> None:
         """
@@ -232,30 +215,149 @@ class MeasurementWithSpheresWidget(ScriptedLoadableModuleWidget, VTKObservationM
             self._checkCanApply()
 
     def _checkCanApply(self, caller=None, event=None) -> None:
-        if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.thresholdedVolume:
-            self.ui.applyButton.toolTip = _("Compute output volume")
-            self.ui.applyButton.enabled = True
+
+
+        if self._parameterNode.isAngleCreated:
+            self.ui.resetview.toolTip=("Reset View")
+            self.ui.resetview.enabled = True
+            self.ui.changeangleposition.toolTip = _("Change Angle")
+            self.ui.changeangleposition.enabled = True
+            self.ui.createangle.toolTip = _("Create Angle")
+            self.ui.createangle.enabled = False
+            self.ui.deleteline.toolTip = _("Delete Line")
+            self.ui.deleteline.enabled = True
+            self.ui.generateline.toolTip = _("Generate Line")
+            self.ui.generateline.enabled = True
+
+
         else:
-            self.ui.applyButton.toolTip = _("Select input and output volume nodes")
-            self.ui.applyButton.enabled = False
-
-    def onApplyButton(self) -> None:
-        """Run processing when user clicks "Apply" button."""
-        with slicer.util.tryWithErrorDisplay(_("Failed to compute results."), waitCursor=True):
-            # Compute output
-            self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-                               self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-            # Compute inverted output (if needed)
-            if self.ui.invertedOutputSelector.currentNode():
-                # If additional output volume is selected then result with inverted threshold is written there
-                self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-                                   self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
+            self.ui.changeangleposition.toolTip = _("Change Angle")
+            self.ui.changeangleposition.enabled = False
+            self.ui.createangle.toolTip = _("Create Angle")
+            self.ui.createangle.enabled = True
+            self.ui.deleteline.toolTip = _("Delete Line")
+            self.ui.deleteline.enabled = True
+            self.ui.generateline.toolTip = _("Generate Line")
+            self.ui.generateline.enabled = True
+            self.ui.resetview.toolTip=("Reset View")
+            self.ui.resetview.enabled = True
+      
 
 
-#
-# MeasurementWithSpheresLogic
-#
+
+
+
+        
+    def resetView(self)->None:
+        slicer.mrmlScene.RemoveNode(self._parameterNode.lineNode)
+        slicer.mrmlScene.RemoveNode(self._parameterNode.lineNode2)
+        slicer.mrmlScene.RemoveNode(self._parameterNode.lineNode3)
+        slicer.mrmlScene.RemoveNode(self._parameterNode.angleNode)
+        slicer.mrmlScene.RemoveNode(self._parameterNode.markups)
+        
+
+        for itemIndex, model in enumerate(self._parameterNode.models):
+
+            slicer.mrmlScene.RemoveNode(model)
+        self._parameterNode.i=0
+        self._parameterNode.count=1
+        self._parameterNode.isAngleCreated=False
+        self._checkCanApply()
+        self._parameterNode.spheres = [vtk.vtkSphereSource() for _ in range(4)]
+        self._parameterNode.models = []
+
+        self._parameterNode.markups.RemoveObserver(self._parameterNode.observerId)
+
+        slicer.app.processEvents()
+
+
+        slicer.util.forceRenderAllViews()
+
+        
+        
+        
+        
+        
+
+    def deleteLine(self)->None:
+        name=self.ui.linetobedeleted.toPlainText()
+        self.logic.deleteLine(name)
+    def generateLine(self)->None:
+        coordinates = self.ui.coordinatesofline.toPlainText().split(',')
+
+ 
+        x, y, z = map(int, coordinates)
+        
+       
+        self.logic.generateLine(self.ui.lineLengthSliderWidget.value,x,y,z, self.ui.nameofline.toPlainText())
+
+    def changePoints(self,markups,spheres, caller=None, event=None)->None:
+       
+         
+        
+        
+        self.logic.UpdateModels(self._parameterNode.lineNode,self._parameterNode.lineNode2,self._parameterNode.lineNode3,self._parameterNode.angleNode,self._parameterNode.i,self._parameterNode.count,self._parameterNode.markups,self._parameterNode.spheres)
+
+    def createAngle(self, caller=None, event=None)->None:
+        self._parameterNode.modelsLogic = slicer.modules.models.logic()
+
+        for itemIndex, sphere in enumerate(self._parameterNode.spheres):
+            sphere.SetPhiResolution(30)
+            sphere.SetThetaResolution(30)
+            self._parameterNode.model =self._parameterNode.modelsLogic.AddModel(sphere.GetOutputPort())
+            self._parameterNode.model.GetDisplayNode().SetVisibility2D(True)
+
+
+            self._parameterNode.model.GetDisplayNode().SetSliceIntersectionThickness(3)
+            self._parameterNode.model.GetDisplayNode().SetColor(1,1-itemIndex*0.3,itemIndex*0.3)
+            self._parameterNode.models.append(self._parameterNode.model)
+    
+            
+        self._parameterNode.lineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode','length1')
+        self._parameterNode.lineNode2 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode','length2')
+        self._parameterNode.lineNode3 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode','length3')
+        self._parameterNode.angleNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsAngleNode','Angle')
+        self._parameterNode.markups = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLMarkupsFiducialNode')
+        self._parameterNode.i=0
+        self._parameterNode.count=1
+        center0, radius0 = self.logic.sphereFrom3Points(self._parameterNode.markups,0)
+        center1, radius1 = self.logic.sphereFrom3Points(self._parameterNode.markups, 3)
+        center2, radius2 = self.logic.sphereFrom3Points(self._parameterNode.markups, 6)
+        center3, radius3 = self.logic.sphereFrom3Points(self._parameterNode.markups, 9)
+        self._parameterNode.lineNode.AddControlPointWorld(center0)
+        self._parameterNode.lineNode.AddControlPointWorld(center1)
+        self._parameterNode.lineNode2.AddControlPointWorld(center1)
+        self._parameterNode.lineNode2.AddControlPointWorld(center2)
+        self._parameterNode.lineNode3.AddControlPointWorld((center0 + center1) / 2)
+        self._parameterNode.lineNode3.AddControlPointWorld((center2 + center3) / 2)
+        self._parameterNode.angleNode.AddControlPointWorld((center0 + center1) / 2)
+        self._parameterNode.angleNode.AddControlPointWorld((center1 + center2) / 2)
+        self._parameterNode.isAngleCreated=True
+        self._checkCanApply()   
+
+          
+            
+            
+            
+
+        
+        self.logic.UpdateModels(self._parameterNode.lineNode,self._parameterNode.lineNode2,self._parameterNode.lineNode3,self._parameterNode.angleNode,self._parameterNode.i,self._parameterNode.count,self._parameterNode.markups,self._parameterNode.spheres)
+        self._parameterNode.observerId= self._parameterNode.markups.AddObserver(slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.changePoints, 2)
+
+    def changeAnglePosition(self)->None:
+        self._parameterNode.i, self._parameterNode.count = self.logic.changeAngle(
+        self._parameterNode.i,
+        self._parameterNode.count,
+        self._parameterNode.angleNode,
+        self._parameterNode.markups
+    )
+        
+        
+          
+
+
+        
+ 
 
 
 class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
@@ -271,47 +373,170 @@ class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         """Called when the logic class is instantiated. Can be used for initializing member variables."""
         ScriptedLoadableModuleLogic.__init__(self)
+        
 
     def getParameterNode(self):
         return MeasurementWithSpheresParameterNode(super().getParameterNode())
+    
+    def deleteLine(self,name):
+        deletedline = slicer.util.getNode(name)
+        deletedline.RemoveAllControlPoints()
+    def generateLine(self,lineLength,x,y,z,nameofline):
+        lineNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsLineNode', nameofline)
+        lineNode.AddControlPointWorld(x,y,z)
+        
+        lineNode.AddControlPointWorld(x,y,z+lineLength)
+        lineDisplayNode = slicer.util.getNode(lineNode.GetDisplayNodeID())
+       
+        # Set line color (red in this example)
+        lineDisplayNode.SetColor([1, 0, 0])
 
-    def process(self,
-                inputVolume: vtkMRMLScalarVolumeNode,
-                outputVolume: vtkMRMLScalarVolumeNode,
-                imageThreshold: float,
-                invert: bool = False,
-                showResult: bool = True) -> None:
+        # Set line thickness
+        lineDisplayNode.SetLineWidth(2)
+       
+
+    def sphereFrom3Points(self,markupsNode, startPointIndex):
+        """Compute center and radius of 3-point sphere from 3 fiducial points
+        source: https://stackoverflow.com/questions/20314306/find-arc-circle-equation-given-three-points-in-space-3d
         """
-        Run the processing algorithm.
-        Can be used without GUI widget.
-        :param inputVolume: volume to be thresholded
-        :param outputVolume: thresholding result
-        :param imageThreshold: values above/below this threshold will be set to 0
-        :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-        :param showResult: show output volume in slice viewers
-        """
+        A = np.zeros(3)
+        B = np.zeros(3)
+        C = np.zeros(3)
+        if markupsNode is None:
+            markupsNode=slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLMarkupsFiducialNode')
+        markupsNode.GetNthControlPointPosition(startPointIndex,A)
+        markupsNode.GetNthControlPointPosition(startPointIndex+1,B)
+        markupsNode.GetNthControlPointPosition(startPointIndex+2,C)
+        a = np.linalg.norm(C - B)
+        b = np.linalg.norm(C - A)
+        c = np.linalg.norm(B - A)
+        s = (a + b + c) / 2
+        R = a*b*c / 4 / np.sqrt(s * (s - a) * (s - b) * (s - c))
+        b1 = a*a * (b*b + c*c - a*a)
+        b2 = b*b * (a*a + c*c - b*b)
+        b3 = c*c * (a*a + b*b - c*c)
+        P = np.column_stack((A, B, C)).dot(np.hstack((b1, b2, b3)))
+        P /= b1 + b2 + b3
+        return P, R
 
-        if not inputVolume or not outputVolume:
-            raise ValueError("Input or output volume is invalid")
+    def UpdateModels(self,lineNode,lineNode2,lineNode3,angleNode,i,count,markups,spheres):
+        """Update the sphere and line models from the fiducial points"""
+        
+        center0, radius0 = self.sphereFrom3Points(markups,0)
+        center1, radius1 = self.sphereFrom3Points(markups, 3)
+        center2, radius2 = self.sphereFrom3Points(markups, 6)
 
-        import time
+        center3, radius3 = self.sphereFrom3Points(markups, 9)
 
-        startTime = time.time()
-        logging.info("Processing started")
+        
 
-        # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-        cliParams = {
-            "InputVolume": inputVolume.GetID(),
-            "OutputVolume": outputVolume.GetID(),
-            "ThresholdValue": imageThreshold,
-            "ThresholdType": "Above" if invert else "Below",
-        }
-        cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-        # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-        slicer.mrmlScene.RemoveNode(cliNode)
+        spheres[0].SetCenter(center0)
+        spheres[0].SetRadius(radius0)
+        spheres[1].SetCenter(center1)
+        spheres[1].SetRadius(radius1)
+        spheres[2].SetCenter(center2)
+        spheres[2].SetRadius(radius2)
+        spheres[3].SetCenter(center3)
+        spheres[3].SetRadius(radius3)
 
-        stopTime = time.time()
-        logging.info(f"Processing completed in {stopTime-startTime:.2f} seconds")
+        
+
+
+        lineNode.SetNthControlPointPosition(0,center0)
+        lineNode.SetNthControlPointPosition(1,center1)
+
+        lineNode2.SetNthControlPointPosition(0,center2)
+        lineNode2.SetNthControlPointPosition(1,center3)
+
+        lineNode = slicer.util.getNode(lineNode.GetDisplayNodeID())
+
+        # Set line color (red in this example)
+        lineNode.SetColor([1, 0, 0])
+        lineNode.SetLineWidth(2)
+
+        lineNode2 = slicer.util.getNode(lineNode2.GetDisplayNodeID())
+
+        # Set line color (red in this example)
+        lineNode2.SetColor([1, 0, 0])
+        lineNode2.SetLineWidth(2)
+
+ 
+
+
+        
+    
+     
+ 
+        
+        # Calculate the midpoint between the centers of Sphere 1 and Sphere 2
+        midpoint_1_2 = (center0 + center1) / 2
+
+        # Calculate the midpoint between the centers of Sphere 3 and Sphere 4
+        midpoint_3_4 = (center2 + center3) / 2
+        lineNode3.SetNthControlPointPosition(0,midpoint_1_2)
+        lineNode3.SetNthControlPointPosition(1,midpoint_3_4)
+     
+        lineDisplayNode3 = slicer.util.getNode(lineNode3.GetDisplayNodeID())
+
+        # Set line color (red in this example)
+        lineDisplayNode3.SetColor([1, 0, 0])
+
+        # Set line thickness
+        lineDisplayNode3.SetLineWidth(2)
+        
+        angleNode.SetNthControlPointPosition(0,midpoint_1_2)
+        angleNode.SetNthControlPointPosition(1,midpoint_3_4)
+      
+        
+        
+
+        angleDisplayNode = slicer.util.getNode(angleNode.GetDisplayNodeID())
+
+        # Set line color (red in this example)
+        angleDisplayNode.SetColor([1, 0, 0])
+        angleDisplayNode.SetLineWidth(2)
+        distance_anglepoints = np.linalg.norm(midpoint_3_4 - midpoint_1_2)
+
+         
+        print('distance between layers is:',distance_anglepoints)
+    
+        # Set line thickness
+        
+
+        
+        slicer.app.processEvents()
+
+
+        slicer.util.forceRenderAllViews()
+
+
+    def changeAngle(self,i,count,angleNode,markups):
+
+         
+        centertemp=0
+     
+        if i<4 :
+            if i!=0:
+                angleNode.RemoveNthControlPoint(2)
+            
+            center, radius = self.sphereFrom3Points(markups, i*3)
+            centertemp=center
+            angleNode.AddControlPointWorld(center)
+            count=+1
+            i+=1
+        else:
+            i=0
+            positionofangle0= angleNode.GetNthControlPointPosition(0)
+            positionofangle1= angleNode.GetNthControlPointPosition(1)
+            center, radius = self.sphereFrom3Points(markups, 0)
+            angleNode.RemoveAllControlPoints()
+            angleNode.AddControlPointWorld(positionofangle1)
+            angleNode.AddControlPointWorld(positionofangle0)
+        return i, count
+
+     
+
+  
 
 
 #
@@ -319,65 +544,10 @@ class MeasurementWithSpheresLogic(ScriptedLoadableModuleLogic):
 #
 
 
-class MeasurementWithSpheresTest(ScriptedLoadableModuleTest):
-    """
-    This is the test case for your scripted module.
-    Uses ScriptedLoadableModuleTest base class, available at:
-    https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
-    """
 
-    def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
-        slicer.mrmlScene.Clear()
 
-    def runTest(self):
-        """Run as few or as many tests as needed here."""
-        self.setUp()
-        self.test_MeasurementWithSpheres1()
 
-    def test_MeasurementWithSpheres1(self):
-        """Ideally you should have several levels of tests.  At the lowest level
-        tests should exercise the functionality of the logic with different inputs
-        (both valid and invalid).  At higher levels your tests should emulate the
-        way the user would interact with your code and confirm that it still works
-        the way you intended.
-        One of the most important features of the tests is that it should alert other
-        developers when their changes will have an impact on the behavior of your
-        module.  For example, if a developer removes a feature that you depend on,
-        your test should break so they know that the feature is needed.
-        """
 
-        self.delayDisplay("Starting the test")
 
-        # Get/create input data
 
-        import SampleData
-
-        registerSampleData()
-        inputVolume = SampleData.downloadSample("MeasurementWithSpheres1")
-        self.delayDisplay("Loaded test data set")
-
-        inputScalarRange = inputVolume.GetImageData().GetScalarRange()
-        self.assertEqual(inputScalarRange[0], 0)
-        self.assertEqual(inputScalarRange[1], 695)
-
-        outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-        threshold = 100
-
-        # Test the module logic
-
-        logic = MeasurementWithSpheresLogic()
-
-        # Test algorithm with non-inverted threshold
-        logic.process(inputVolume, outputVolume, threshold, True)
-        outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-        self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-        self.assertEqual(outputScalarRange[1], threshold)
-
-        # Test algorithm with inverted threshold
-        logic.process(inputVolume, outputVolume, threshold, False)
-        outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-        self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-        self.assertEqual(outputScalarRange[1], inputScalarRange[1])
-
-        self.delayDisplay("Test passed")
+ 
